@@ -1,6 +1,28 @@
-settings set prompt "(lisa)"
+topsettings set prompt "(lisa)"
 settings set target.x86-disassembly-flavor intel
-command script import ~/lisa.py
-command script import lldb
+script import os, sys, lldb
+# So that ~/Code/llisa takes precedence.
+script sys.path[:0] = [os.path.expanduser('~/Code/llisa/')]
+
+script import utils
+command script import ~/Code/llisa/lisa.py
+
 command script add -f lisa.alias lisa
+
+command alias bs breakpoint set --name
+comman alias bmain breakpoint set --name main
+command alias bd breakpoint disable
+command alias jmp register write pc
+
+command alias bcommand breakpoint command add
+command alias commands breakpoint command listb
+
+command alias pwd script print os.getcwd()
+command script add -f utils.chdir cd
+command script add -f utils.system system
+
+command alias relisa command script import ~/Code/llisa/lisa.py
+
 lisa
+
+
