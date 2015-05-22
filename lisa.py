@@ -72,7 +72,7 @@ def banner():
     print(tty_colors.red() + "\t-An Exploit Dev Swiss Army Knife. Version: " + lisaversion + tty_colors.default())
 
 
-#convert to hex
+# convert to hex
 def to_hex(var):
     """
         converts given value to hex
@@ -80,7 +80,7 @@ def to_hex(var):
     return hex(var)
 
 
-#hextoascii
+# hextoascii
 def hex2ascii(debugger, hex, result, dict):
     """
         converts Hex to ascii
@@ -89,7 +89,7 @@ def hex2ascii(debugger, hex, result, dict):
     print(hex.replace('0x', '').decode('hex'))
 
 
-#generate random hex of length between n - m
+# generate random hex of length between n - m
 def urandom(debugger, n, result, dict):
     """
         Generates random hex of given length
@@ -116,7 +116,7 @@ def shell(debugger, command, result, dict):
     return
 
 
-#term colors
+# term colors
 
 class TerminalColors:
     '''Simple terminal colors class'''
@@ -271,9 +271,9 @@ class TerminalColors:
 ####################################
 #       LLDB                       #
 ####################################
-#step,stepinto functions for these like in lisa
+# step,stepinto functions for these like in lisa
 
-#set malloc debugging features
+# set malloc debugging features
 def setMallocDebug(debugger, c, result, dict):
     """
        sets DYLD_INSERT_LIBRARIES to /usr/lib/libgmalloc.dylib
@@ -282,7 +282,7 @@ def setMallocDebug(debugger, c, result, dict):
     return True
 
 
-#execute given LLDB command
+# execute given LLDB command
 def execute(debugger, lldb_command, result, dict):
     """
         Execute given command and print the outout to stdout
@@ -291,7 +291,7 @@ def execute(debugger, lldb_command, result, dict):
     debugger.HandleCommand(lldb_command)
 
 
-#execute command and return output
+# execute command and return output
 def executeReturnOutput(debugger, lldb_command, result, dict):
     """
         Execute given command and returns the outout
@@ -390,25 +390,25 @@ def context(debugger, command, result, dict):
         Usage:
             ct
     """
-    #disas
+    # disas
     op = executeReturnOutput(debugger, "disassemble -c 2 -s $pc", result, dict)
     print
     op
 
-    #stack
+    # stack
     op = executeReturnOutput(debugger, "x/10x $sp", result, dict)
     print(tty_colors.red() + "[*] Stack :\n" + tty_colors.default())
     print
     tty_colors.blue() + op + tty_colors.default()
 
-    #registers
+    # registers
     op = executeReturnOutput(debugger, "register read", result, dict)
     print
     tty_colors.red() + "[*] Registers\t:" + tty_colors.default()
     print
     op.split("\n\n")[0].split('General Purpose Registers:\n')[1].split('eflags')[0]
 
-    #jump
+    # jump
     dis = executeReturnOutput(debugger, 'disassemble -c 1 -s $pc', result, dict).split(':  ')[1].split()[0]
     if 'j' in dis:
         jumpto = testjump(debugger, command, result, dict)
@@ -460,7 +460,7 @@ def get_eflags(debugger, command, result, dict):
     return flags
 
 
-#create html report
+# create html report
 def report(debugger, command, result, dict):
     filename = lldb.target.executable.basename + "_" + str(lldb.process.id) + "_" + str(int(time.time())) + ".html"
     description = '''Export the state of current target into a crashlog file'''
@@ -482,7 +482,7 @@ def report(debugger, command, result, dict):
         out_file.write('Identifier:      %s</br>' % (identifier))
         out_file.write('\nDate/Time:       %s</br>' % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         out_file.write('OS Version:      Mac OS X %s (%s)</br>' % (
-        platform.mac_ver()[0], commands.getoutput('sysctl -n kern.osversion')));
+            platform.mac_ver()[0], commands.getoutput('sysctl -n kern.osversion')));
         out_file.write('Report Version:  9</br>')
         out_file.write('Exploitable: ' + reportexploitable + '</br>')
         for thread_idx in range(lldb.process.num_threads):
@@ -530,8 +530,8 @@ def report(debugger, command, result, dict):
                     if module_version_array:
                         module_version = '.'.join(map(str, module_version_array))
                     out_file.write('    0x%16.16x - 0x%16.16x  %s (%s - ???) <%s> %s\n</br>' % (
-                    text_segment_load_addr, text_segment_end_load_addr, identifier, module_version,
-                    module.GetUUIDString(), module.file.fullpath))
+                        text_segment_load_addr, text_segment_end_load_addr, identifier, module_version,
+                        module.GetUUIDString(), module.file.fullpath))
         out_file.write("</p></body></html>")
         out_file.close()
     else:
@@ -543,7 +543,7 @@ def report(debugger, command, result, dict):
 ####################################
 
 
-#pattern create and pattern offset
+# pattern create and pattern offset
 def pattern_create(debugger, size, result, dict, returnv=False):
     try:
         length = int(size)
@@ -572,16 +572,52 @@ def pattern_create(debugger, size, result, dict, returnv=False):
     if returnv:
         return string[:length]
 
-#check if process has ASLR support enabled
-def check_ASLR_enabled(debugger, command, result, dic):
-    command = "settings show target.disable-aslr"
 
-    lf = lldb.SB.GetLaunchFlags()
-    #print(lf)
+def aslr(debugger, command, result, dic):
+    """
+    Checks or sets the state of ASRL support
+    """
+    cmds = shlex.split(command)
+
+    if len(cmds) > 0 and cmds[0] in ['enable','disable']:
+        cmd = "settings set target.disable-aslr "
+        msg = ""
+        if cmds[0] == "enable":
+            cmd += " false"
+        else:
+            cmd += " true"
+        executeReturnOutput(debugger, cmd, result, dict)
+        check_ASLR_enabled(debugger, command, result, dic)
+
+    else:
+        if len(cmds) == 0:
+            check_ASLR_enabled(debugger, command, result, dic)
+        else:
+            print('''Usage:
+            aslr - print status of ASLR support
+            aslr <enable|disable> set state of aslr support
+
+            ''')
+    return False
+
+# check if process has ASLR support enabled
+def check_ASLR_enabled(debugger, command, result, dic):
+    '''
+    Checks or sets the state of ASRL support
+    '''
+    cmd = "settings show target.disable-aslr"
+    state = executeReturnOutput(debugger, cmd, result, dic).split(" = ")[1].strip()
+    if state == "true":
+        print("ASLR " + tty_colors.red() + "DISABLED" + tty_colors.default())
+        return False
+    if state == "false":
+        print("ASLR " + tty_colors.green() + "ENABLED" + tty_colors.default())
+        return False
+
     return False
 
 
-#check if given pattern is in cyclic pattern
+# check if given pattern is in cyclic pattern
 def check_if_cyclic(debugger, pat, result, dict, ret=False):
     seta = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     setb = "abcdefghijklmnopqrstuvwxyz"
@@ -642,7 +678,7 @@ def check_if_cyclic(debugger, pat, result, dict, ret=False):
         return True
 
 
-#pattern search
+# pattern search
 def pattern_offset(debugger, sizepat, result, dict):
     """[*] search offset of pattern."""
 
@@ -695,21 +731,23 @@ def pattern_offset(debugger, sizepat, result, dict):
             "pattern_offset 250 Aa2A"
 
 
-#return address in register
+# return address in register
 def getregvalue(debugger, reg, result, dict):
     output = executeReturnOutput(debugger, 'register read ' + reg, result, dict)
     return output.split("= ")[-1].split(" ")[0]
 
 
-#return whether or not the base pointer is far away from the stack pointer.
+# return whether or not the base pointer is far away from the stack pointer.
 def bp_inconsistent_with_sp(debugger, command, result, dict):
-    #define MAX_DISTANCE (PAGE_SIZE * 10)
+    # define MAX_DISTANCE (PAGE_SIZE * 10)
     bp_val = getregvalue(debugger, "bp", result, dict);
     sp_val = getregvalue(debugger, "sp", result, dict);
     #    No check if bp_val > sp_val since bp_val - sp_val may have underflowed.
     if (bp_val - sp_val) > MAX_DISTANCE:
         return True
     return False
+
+
 
 
 def is_stack_suspicious(access_address):
@@ -763,13 +801,13 @@ def is_stack_suspicious(access_address):
     return
 
 
-#get disassembly
+# get disassembly
 def getdisassembly(debugger, c, result, dict):
     disas = executeReturnOutput(debugger, "disassemble -c 1 -s $pc", result, dict).split('\n')[1].split(':')[1]
     return disas
 
 
-#get exception
+# get exception
 def getexception(debugger, c, result, dict):
     output = executeReturnOutput(debugger, "process status", result, dict)
     s1 = output.find("stop reason =")
@@ -777,7 +815,7 @@ def getexception(debugger, c, result, dict):
     return output[s1:s1 + s2].replace("stop reason =", '')
 
 
-#get exception address
+# get exception address
 def getexceptionaddr(debugger, c, result, dict):
     output = executeReturnOutput(debugger, "process status", result, dict)
     s1 = output.find("address=")
@@ -785,7 +823,7 @@ def getexceptionaddr(debugger, c, result, dict):
     return output[s1:s1 + s2].replace("address=", '')
 
 
-#reg should be a 2 character string like ax, di, dx, not necessarily null terminated.
+# reg should be a 2 character string like ax, di, dx, not necessarily null terminated.
 def value_for_register(debugger, reg, result, dict):
     if reg[1:] == "ax":
         return getregvalue(debugger, 'rax', result, dict)
@@ -793,6 +831,7 @@ def value_for_register(debugger, reg, result, dict):
         return getregvalue(debugger, 'rbx', result, dict);
     elif reg[1:] == "cx":
         return getregvalue(debugger, 'rcx', result, dict)
+
     elif reg[1:] == "dx":
         return getregvalue(debugger, 'rdx', result, dict)
     elif reg[1:] == "di":
@@ -804,8 +843,7 @@ def value_for_register(debugger, reg, result, dict):
     elif reg[1:] == "bp":
         return getregvalue(debugger, 'rbp', result, dict)
     else:
-        print
-        "ERROR: unexpected register %s\n" % reg
+        print("ERROR: unexpected register %s\n" % reg)
         sys.exit()
 
 
@@ -832,7 +870,7 @@ def type_for_two_memory(debugger, disassembly, access_address, result, dict):
         return "write"
 
 
-#get exception type
+# get exceptiogegetexceptiontypetexceptiontypen typegetexceptiontype
 def getexceptiontype(debugger, disassembly, result, dict):
     last_comma = disassembly.find(',')
     right_paren = disassembly.find(']')
@@ -896,30 +934,30 @@ def getexceptiontype(debugger, disassembly, result, dict):
         return type
 
 
-#eStateAttaching = 3
-#eStateConnected = 2
-#eStateCrashed = 8
-#eStateDetached = 9
-#eStateExited = 10
-#eStateInvalid = 0
-#eStateLaunching = 4
-#eStateRunning = 6
-#eStateStepping = 7
-#eStateStopped = 5
-#eStateSuspended = 11
-#eStateUnloaded = 1
-#eStopReasonBreakpoint = 3
-#eStopReasonException = 6
-#eStopReasonExec = 7
-#eStopReasonInvalid = 0
-#eStopReasonNone = 1
-#eStopReasonPlanComplete = 8
-#eStopReasonSignal = 5
-#eStopReasonThreadExiting = 9
-#eStopReasonTrace = 2
-#eStopReasonWatchpoint = 4
+# eStateAttaching = 3
+# eStateConnected = 2
+# eStateCrashed = 8
+# eStateDetached = 9
+# eStateExited = 10
+# eStateInvalid = 0
+# eStateLaunching = 4
+# eStateRunning = 6
+# eStateStepping = 7
+# eStateStopped = 5
+# eStateSuspended = 11
+# eStateUnloaded = 1
+# eStopReasonBreakpoint = 3
+# eStopReasonException = 6
+# eStopReasonExec = 7
+# eStopReasonInvalid = 0
+# eStopReasonNone = 1
+# eStopReasonPlanComplete = 8
+# eStopReasonSignal = 5
+# eStopReasonThreadExiting = 9
+# eStopReasonTrace = 2
+# eStopReasonWatchpoint = 4
 
-#check if exploitable or not
+# check if exploitable or not
 
 def exploitable(debugger, command, result, dict):
     """[*] checks if the crash is exploitable"""
@@ -929,7 +967,7 @@ def exploitable(debugger, command, result, dict):
 
     stopreason = lldb.thread.stop_reason
     if stopreason == lldb.eStopReasonSignal:
-        signal = lldb.thread.GetStopDescription(30)
+        signal = lldb.thread.GetStopDgetexceptiontypeescription(30)
         if "SIGABRT" in signal:
             bt = executeReturnOutput(debugger, "bt", result, dict)
             if "__stack_chk_fail" in bt:
@@ -1035,8 +1073,8 @@ def exploitable(debugger, command, result, dict):
             reportexploitable = "Presumed exploitable based on the discrepancy between the stack pointer and base pointer registers. If -fomit-frame-pointer was used to build the code, set the CW_IGNORE_FRAME_POINTER env variable.\nexploitable = yes"
 
 
-#Vulnerbility Classfication
-#have to code
+# Vulnerbility Classfication
+# have to code
 
 def alias(debugger, commands, result, dict):
     banner()
@@ -1049,7 +1087,7 @@ def alias(debugger, commands, result, dict):
     execute(debugger, 'command script add --function lisa.s s', result, dict)
     execute(debugger, 'command script add --function lisa.si si', result, dict)
     execute(debugger, 'command script add --function lisa.so so', result, dict)
-    execute(debugger, 'command script add --function lisa.check_ASLR_enabled aslr', result, dict)
+    execute(debugger, 'command script add --function lisa.aslr aslr', result, dict)
 
 
 tty_colors = TerminalColors(True)
