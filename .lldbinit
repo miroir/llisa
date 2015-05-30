@@ -13,6 +13,7 @@ command alias bs breakpoint set --name
 comman alias bmain breakpoint set --name main
 command alias bd breakpoint disable
 command alias jmp register write pc
+command alias dm disas -n
 
 command alias bcommand breakpoint command add
 command alias commands breakpoint command listb

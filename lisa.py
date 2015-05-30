@@ -17,6 +17,7 @@
 import os
 import re
 import sys
+from libsvn.core import svn_auth_baton_t
 import lldb
 import time
 import shlex
@@ -29,6 +30,7 @@ import optparse
 import platform
 from struct import *
 from sys import version_info
+from twisted.scripts.tap2rpm import setupBuildFiles
 
 lisaversion = 'New Dawn'
 PAGE_SIZE = 4096
@@ -52,7 +54,9 @@ REGISTERS = {
 def banner():
     llisa2 = """
      lllllll lllllll   iiii
-     l:::::l l:::::l  i::::i
+     l:::::l l    sp = str(sbthread.GetSP())
+    pc = str(sbthread.GetPC())
+    fp = str(sbthread.GetFP()):::::l  i::::i
      l:::::l l:::::l   iiii
      l:::::l l:::::l
      l::::l  l::::l iiiiiii     ssssssssss     aaaaaaaaaaaaa
@@ -119,7 +123,7 @@ def shell(debugger, command, result, dict):
 # term colors
 
 class TerminalColors:
-    '''Simple terminal colors class'''
+    """Simple terminal colors class"""
 
     def __init__(self, enabled=True):
         # TODO: discover terminal type from "file" and disable if
@@ -127,144 +131,144 @@ class TerminalColors:
         self.enabled = enabled
 
     def reset(self):
-        '''Reset all terminal colors and formatting.'''
+        """Reset all terminal colors and formatting."""
         if self.enabled:
-            return "\x1b[0m";
+            return "\x1b[0m"
         return ''
 
     def bold(self, on=True):
-        '''Enable or disable bold depending on the "on" parameter.'''
+        """Enable or disable bold depending on the "on" parameter."""
         if self.enabled:
             if on:
-                return "\x1b[1m";
+                return "\x1b[1m"
             else:
-                return "\x1b[22m";
+                return "\x1b[22m"
         return ''
 
     def italics(self, on=True):
-        '''Enable or disable italics depending on the "on" parameter.'''
+        """Enable or disable italics depending on the "on" parameter."""
         if self.enabled:
             if on:
-                return "\x1b[3m";
+                return "\x1b[3m"
             else:
-                return "\x1b[23m";
+                return "\x1b[23m"
         return ''
 
     def underline(self, on=True):
-        '''Enable or disable underline depending on the "on" parameter.'''
+        """Enable or disable underline depending on the "on" parameter."""
         if self.enabled:
             if on:
-                return "\x1b[4m";
+                return "\x1b[4m"
             else:
-                return "\x1b[24m";
+                return "\x1b[24m"
         return ''
 
     def inverse(self, on=True):
-        '''Enable or disable inverse depending on the "on" parameter.'''
+        """Enable or disable inverse depending on the "on" parameter."""
         if self.enabled:
             if on:
-                return "\x1b[7m";
+                return "\x1b[7m"
             else:
-                return "\x1b[27m";
+                return "\x1b[27m"
         return ''
 
     def strike(self, on=True):
-        '''Enable or disable strike through depending on the "on" parameter.'''
+        """Enable or disable strike through depending on the "on" parameter."""
         if self.enabled:
             if on:
-                return "\x1b[9m";
+                return "\x1b[9m"
             else:
-                return "\x1b[29m";
+                return "\x1b[29m"
         return ''
 
     def black(self, fg=True):
-        '''Set the foreground or background color to black.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to black.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[30m";
+                return "\x1b[30m"
             else:
-                return "\x1b[40m";
+                return "\x1b[40m"
         return ''
 
     def red(self, fg=True):
-        '''Set the foreground or background color to red.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to red.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[31m";
+                return "\x1b[31m"
             else:
-                return "\x1b[41m";
+                return "\x1b[41m"
         return ''
 
     def green(self, fg=True):
-        '''Set the foreground or background color to green.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to green.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[32m";
+                return "\x1b[32m"
             else:
-                return "\x1b[42m";
+                return "\x1b[42m"
         return ''
 
     def yellow(self, fg=True):
-        '''Set the foreground or background color to yellow.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to yellow.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[43m";
+                return "\x1b[43m"
             else:
-                return "\x1b[33m";
+                return "\x1b[33m"
         return ''
 
     def blue(self, fg=True):
-        '''Set the foreground or background color to blue.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to blue.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[34m";
+                return "\x1b[34m"
             else:
-                return "\x1b[44m";
+                return "\x1b[44m"
         return ''
 
     def magenta(self, fg=True):
-        '''Set the foreground or background color to magenta.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to magenta.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[35m";
+                return "\x1b[35m"
             else:
-                return "\x1b[45m";
+                return "\x1b[45m"
         return ''
 
     def cyan(self, fg=True):
-        '''Set the foreground or background color to cyan.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to cyan.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[36m";
+                return "\x1b[36m"
             else:
-                return "\x1b[46m";
+                return "\x1b[46m"
         return ''
 
     def white(self, fg=True):
-        '''Set the foreground or background color to white.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to white.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[37m";
+                return "\x1b[37m"
             else:
-                return "\x1b[47m";
+                return "\x1b[47m"
         return ''
 
     def default(self, fg=True):
-        '''Set the foreground or background color to the default.
-            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False.'''
+        """Set the foreground or background color to the default.
+            The foreground color will be set if "fg" tests True. The background color will be set if "fg" tests False."""
         if self.enabled:
             if fg:
-                return "\x1b[39m";
+                return "\x1b[39m"
             else:
-                return "\x1b[49m";
+                return "\x1b[49m"
         return ''
 
 
@@ -384,6 +388,73 @@ def testjump(debugger, command, result, dict):
     return False
 
 
+def frame_data(sbframe):
+    """
+    @type sbframe: lldb.SBFrame
+    """
+    data = {}
+    data['sp'] = sbframe.GetSP()
+    data['pc'] = sbframe.GetPC()
+    data['fp'] = sbframe.GetFP()
+    data['id'] = sbframe.GetFrameID()
+    return data
+
+def frame_info(sbframe, parent_thread, called_from_parent_thread = False):
+    """
+    called_from_parent_thread indicates whether the parent_thread argument is usable with type SBThread or not
+    @type sbframe: lldb.SBFrame
+    """
+    data = frame_data(sbframe)
+    frame_id = str(sbframe.GetFrameID())
+    msg = "ID:" + data['id'] + ",SP:" + data['sp'] + ",FP:" + data['fp'] + ",PC:" + data['pc']
+    return msg
+
+def thread_data(sbthread):
+    """
+    @type sbthread: lldb.SBThread
+    """
+    data = {'tid': sbthread.GetThreadID(),
+            'frames': []
+            }
+    data[] = sbthread.GetThreadID()
+    frame_count = sbthread.GetNumFrames()
+
+    data['frames'] = map(frame_data(), sbthread.get_thread_frames())
+    print(data)
+    return data
+
+def thread_info(sbthread, useless):
+    """
+    @type sbthread: lldb.SBThread
+    """
+    frame_count = sbthread.GetNumFrames()
+    msg = "TID:" + str(sbthread.GetThreadID())
+    for i in xrange(frame_count):
+        msg += "|" + frame_info(sbthread.GetFrameAtIndex(i),
+                                 sbthread, called_from_parent_thread = True)
+    return msg
+
+
+def process_info(sbprocess, useless):
+    """
+    @type sbprocess: lldb.SBProcess
+    """
+    return "process"
+
+
+def get_stack(debugger, result, dict):
+
+
+    thread = lldb.thread
+    '''
+    @type sbthread: lldb.SBThread
+    '''
+    bt = thread_data(thread)
+
+    result = executeReturnOutput(debugger, "x/20x $sp", result, dict)
+    return result
+
+
 def context(debugger, command, result, dict):
     """
         Prints context of current execution context
@@ -392,24 +463,20 @@ def context(debugger, command, result, dict):
     """
     # disas
     op = executeReturnOutput(debugger, "disassemble -c 2 -s $pc", result, dict)
-    print
-    op
+    print(op)
 
     # stack
-    op = executeReturnOutput(debugger, "x/10x $sp", result, dict)
+    stack_values = get_stack(debugger, result, dict)
     print(tty_colors.red() + "[*] Stack :\n" + tty_colors.default())
-    print
-    tty_colors.blue() + op + tty_colors.default()
+    print(tty_colors.blue() + stack_values + tty_colors.default())
 
     # registers
     op = executeReturnOutput(debugger, "register read", result, dict)
-    print
-    tty_colors.red() + "[*] Registers\t:" + tty_colors.default()
-    print
-    op.split("\n\n")[0].split('General Purpose Registers:\n')[1].split('eflags')[0]
+    print(tty_colors.red() + "[*] Registers\t:" + tty_colors.default())
+    print(op.split("\n\n")[0].split('General Purpose Registers:\n')[1].split('eflags')[0])
 
     # jump
-    dis = executeReturnOutput(debugger, 'disassemble -c 1 -s $pc', result, dict).split(':  ')[1].split()[0]
+    dis = executeReturnOutput(debugger, 'disassemble -c 1 -s $pc', result, dict).split(': ')[1].split()[0]
     if 'j' in dis:
         jumpto = testjump(debugger, command, result, dict)
 
@@ -418,8 +485,7 @@ def context(debugger, command, result, dict):
             destAddr = code.split('  ')[4]
             if ';' in code:
                 destFunc = code.split(';')[1]
-                print
-                tty_colors.red() + "[*] Jumping to\t:" + destFunc + tty_colors.default()
+                print(tty_colors.red() + "[*] Jumping to\t:" + destFunc + tty_colors.default())
 
 
 def get_eflags(debugger, command, result, dict):
@@ -548,8 +614,8 @@ def pattern_create(debugger, size, result, dict, returnv=False):
     try:
         length = int(size)
     except:
-        print
-    "[+] Usage: pattern_create <length> [set a] [set b] [set c]"
+        print("[+] Usage: pattern_create <length> [set a] [set b] [set c]")
+
     seta = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     setb = "abcdefghijklmnopqrstuvwxyz"
     setc = "0123456789"
@@ -566,8 +632,7 @@ def pattern_create(debugger, size, result, dict, returnv=False):
         if b == len(setb): b = 0;a += 1
         if a == len(seta): a = 0
     if not returnv:
-        print
-        tty_colors.red() + string[:length] + tty_colors.default()
+        print(tty_colors.red() + string[:length] + tty_colors.default())
 
     if returnv:
         return string[:length]
@@ -579,7 +644,7 @@ def aslr(debugger, command, result, dic):
     """
     cmds = shlex.split(command)
 
-    if len(cmds) > 0 and cmds[0] in ['enable','disable']:
+    if len(cmds) > 0 and cmds[0] in ['enable', 'disable']:
         cmd = "settings set target.disable-aslr "
         msg = ""
         if cmds[0] == "enable":
@@ -600,11 +665,12 @@ def aslr(debugger, command, result, dic):
             ''')
     return False
 
+
 # check if process has ASLR support enabled
 def check_ASLR_enabled(debugger, command, result, dic):
-    '''
+    """
     Checks or sets the state of ASRL support
-    '''
+    """
     cmd = "settings show target.disable-aslr"
     state = executeReturnOutput(debugger, cmd, result, dic).split(" = ")[1].strip()
     if state == "true":
@@ -636,12 +702,10 @@ def check_if_cyclic(debugger, pat, result, dict, ret=False):
                     if string[i + 2].isdigit():
                         pass
                     else:
-                        print
-                        tty_colors.red() + "Not a cyclic pattern" + tty_colors.default()
+                        print(tty_colors.red() + "Not a cyclic pattern" + tty_colors.default())
                         return False
                 else:
-                    print
-                    tty_colors.red() + "Not a cyclic pattern" + tty_colors.default()
+                    print(tty_colors.red() + "Not a cyclic pattern" + tty_colors.default())
                     return False
 
             elif string[i].isupper():
@@ -649,12 +713,12 @@ def check_if_cyclic(debugger, pat, result, dict, ret=False):
                     if string[i + 2].isdigit():
                         pass
                     else:
-                        print
-                        tty_colors.red() + "Not a cyclic pattern" + tty_colors.default()
+                        print(
+                            tty_colors.red() + "Not a cyclic pattern" + tty_colors.default())
                         return False
                 else:
-                    print
-                    tty_colors.red() + "Not a cyclic pattern" + tty_colors.default()
+                    print(
+                        tty_colors.red() + "Not a cyclic pattern" + tty_colors.default())
                     return False
 
         elif string[i].isdigit():
@@ -672,8 +736,7 @@ def check_if_cyclic(debugger, pat, result, dict, ret=False):
                     return False
 
         i += 3
-    print
-    "seems to be a valid pattern"
+    print("seems to be a valid pattern")
     if ret == True:
         return True
 
@@ -698,13 +761,10 @@ def pattern_offset(debugger, sizepat, result, dict):
             found = [m.start() for m in re.finditer(pat, pattern)]
             #                found=pattern.find(pat)
             if found != -1:
-                print
-                found
+                print(found)
         except:
-            print
-            "please check the syntax"
-            print
-            "pattern_offset 250 Aa2A"
+            print("please check the syntax")
+            print("pattern_offset 250 Aa2A")
 
     elif len(sizepat.split(' ')) == 1:
         try:
@@ -722,13 +782,10 @@ def pattern_offset(debugger, sizepat, result, dict):
             found = [m.start() for m in re.finditer(pat, pattern)]
             #                found=pattern.find(pat)
             if found != -1:
-                print
-                found
+                print(found)
         except:
-            print
-            "please check the syntax"
-            print
-            "pattern_offset 250 Aa2A"
+            print("please check the syntax")
+            print("pattern_offset 250 Aa2A")
 
 
 # return address in register
@@ -746,8 +803,6 @@ def bp_inconsistent_with_sp(debugger, command, result, dict):
     if (bp_val - sp_val) > MAX_DISTANCE:
         return True
     return False
-
-
 
 
 def is_stack_suspicious(access_address):
@@ -769,17 +824,20 @@ def is_stack_suspicious(access_address):
         " WTF::tryFastRealloc ", " WTF::TCMalloc_Central_FreeList ", " GMfree ", " GMmalloc_zone_free ",
         " GMrealloc ", " GMmalloc_zone_realloc "]
     stack = executeReturnOutput("bt")
+
     if "0   ???" in stack:
-        print
-        tty_colors.red() + "This crash is suspected to be exploitable because the crashing instruction is outside of a known function, i.e. in dynamically generated code" + tty_colors.default()
+        print(
+            tty_colors.red() + "This crash is suspected to be exploitable because the crashing instruction is outside of a known function, i.e. in dynamically generated code" + tty_colors.default())
         reportexploitable = "This crash is suspected to be exploitable because the crashing instruction is outside of a known function, i.e. in dynamically generated code"
         is_exploitable = "yes"
         return
+
     MINIMUM_RECURSION_LENGTH = 300
     stack_length = len(stack.split("\n"))
+
     if stack_length > MINIMUM_RECURSION_LENGTH:
-        print
-        tty_colors.red() + "The crash is suspected to be not exploitable due to unbounded recursion since there were %d stack frames." + tty_colors.default()
+        print(
+            tty_colors.red() + "The crash is suspected to be not exploitable due to unbounded recursion since there were %d stack frames." + tty_colors.default())
         reportexploitable = "The crash is suspected to be not exploitable due to unbounded recursion since there were %d stack frames."
         is_exploitable = "no"
         return
@@ -793,8 +851,8 @@ def is_stack_suspicious(access_address):
             elif i == " objc_msgSend" and access_address << PAGE_SIZE:
                 continue
             else:
-                print
-                tty_colors.red() + "The crash is suspected to be an exploitable issue due to the suspicious function in the stack trace of the crashing thread" % i + tty_colors.default()
+                print(
+                    tty_colors.red() + "The crash is suspected to be an exploitable issue due to the suspicious function in the stack trace of the crashing thread" % i + tty_colors.default())
                 reportexploitable = "The crash is suspected to be an exploitable issue due to the suspicious function in the stack trace of the crashing thread."
                 is_exploitable = "yes"
                 return
@@ -971,14 +1029,14 @@ def exploitable(debugger, command, result, dict):
         if "SIGABRT" in signal:
             bt = executeReturnOutput(debugger, "bt", result, dict)
             if "__stack_chk_fail" in bt:
-                print
-                tty_colors.red() + "Seems like a stack overflow. Found suspicious function '" + bt[bt.find(
+                print(tty_colors.red() + "Seems like a stack overflow. Found suspicious function '" + bt[bt.find(
                     "__stack_chk_fail"):bt.find("__stack_chk_fail") + len(
-                    "__stack_chk_fail")] + "' in the execution stack" + tty_colors.default()
+                    "__stack_chk_fail")] + "' in the execution stack" + tty_colors.default())
                 reportexploitable = "Seems like a stack overflow. Found suspicious function " + bt[bt.find(
                     "__stack_chk_fail"):bt.find("__stack_chk_fail") + len(
                     "__stack_chk_fail")] + " in the execution stack"
                 return
+
     if stopreason == lldb.eStopReasonException:
         rip = getregvalue(debugger, "$rip", result, dict)
         exception = getexception(debugger, "", result, dict).strip(' ')
@@ -988,10 +1046,9 @@ def exploitable(debugger, command, result, dict):
 
         """case 1: accessing invalid address"""
         if access_address == getregvalue(debugger, "pc", result, dict):
-            print
-            tty_colors.red() + "Trying to execute a bad address, this is a potentially exploitable issue\n" + tty_colors.default()
-            print
-            tty_colors.red() + "exploitable = yes" + tty_colors.default()
+            print(
+                tty_colors.red() + "Trying to execute a bad address, this is a potentially exploitable issue\n" + tty_colors.default())
+            print(tty_colors.red() + "exploitable = yes" + tty_colors.default())
             reportexploitable = "Trying to execute a bad address, this is a potentially exploitable issue\nexploitable = yes"
             access_type = "exec"
 
@@ -1001,39 +1058,41 @@ def exploitable(debugger, command, result, dict):
                 addr = access_address
                 max_offset = 1024
                 if (addr > 0x55555555 - max_offset and addr < 0x55555555 + max_offset):
-                    print
-                    tty_colors.red() + "The access address indicates the use of freed memory if MallocScribble was used, or uninitialized memory if libgmalloc and MALLOC_FILL_SPACE was used." + tty_colors.default()
+                    print(
+                        tty_colors.red() + "The access address indicates the use of freed memory if MallocScribble was used, or uninitialized memory if libgmalloc and MALLOC_FILL_SPACE was used." + tty_colors.default())
                     reportexploitable = "The access address indicates the use of freed memory if MallocScribble was used, or uninitialized memory if libgmalloc and MALLOC_FILL_SPACE was used."
                 if (addr > 0xaaaaaaaa - max_offset and addr < 0xaaaaaaaa + max_offset):
-                    print
-                    tty_colors.red() + "The access address indicates that uninitialized memory was being used if MallocScribble was used.\n" + tty_colors.default()
+                    print(
+                        tty_colors.red() + "The access address indicates that uninitialized memory was being used if MallocScribble was used.\n" + tty_colors.default())
                     reportexploitable = "The access address indicates that uninitialized memory was being used if MallocScribble was used.\n"
 
                 elif access_type == "recursion":
                     is_exploitable = "no"
                 else:
                     is_exploitable = "yes"
+
             if exception == "EXC_I386_GPFLT":
-                print
-                tty_colors.red() + "The exception code indicates that the access address was invalid in the 64-bit ABI (it was > 0x0000800000000000).\n" + tty_colors.default()
+                print(
+                    tty_colors.red() + "The exception code indicates that the access address was invalid in the 64-bit ABI (it was > 0x0000800000000000).\n" + tty_colors.default())
                 reportexploitable = "The exception code indicates that the access address was invalid in the 64-bit ABI (it was > 0x0000800000000000).\n"
+
             if access_address < PAGE_SIZE:
-                print
-                tty_colors.blue() + "Null Dereference. Probably not exploitable" + tty_colors.default()
+                print(
+                    tty_colors.blue() + "Null Dereference. Probably not exploitable" + tty_colors.default())
                 reportexploitable = "Null Dereference. Probably not exploitable"
             else:
                 is_exploitable = "yes"
-                print
-                tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default()
-                print
-                tty_colors.red() + "Crash accessing invalid address. " + tty_colors.default()
+                print(
+                    tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default())
+                print(
+                    tty_colors.red() + "Crash accessing invalid address. " + tty_colors.default())
                 reportexploitable = "Crash accessing invalid address.\nexploitable = yes"
-        elif exception == "EXC_BAD_INSTRUCTION":
+        elif exception    == "EXC_BAD_INSTRUCTION":
             is_exploitable = "yes"
-            print
-            tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default()
-            print
-            tty_colors.blue() + "Illegal instruction at 0x%016qx, probably a exploitable issue unless the crash was in libdispatch/xpc." + tty_colors.default()
+            print(
+                tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default())
+            print(
+                tty_colors.blue() + "Illegal instruction at 0x%016qx, probably a exploitable issue unless the crash was in libdispatch/xpc." + tty_colors.default())
             reportexploitable = "Illegal instruction at 0x%016qx, probably a exploitable issue unless the crash was in libdispatch/xpc.\nexploitable = yes"
         elif exception == "EXC_ARITHMETIC":
             is_exploitable = "no"
@@ -1044,32 +1103,33 @@ def exploitable(debugger, command, result, dict):
             reportexploitable = "Arithmetic exception at 0x%016qx, probably not exploitable."
         elif exception == "EXC_SOFTWARE":
             is_exploitable = "no"
-            print
-            tty_colors.blue() + "is_exploitable = %s" % is_exploitable + tty_colors.default()
-            print
-            tty_colors.blue() + "Software exception.\n" + tty_colors.default()
+            print(
+                tty_colors.blue() + "is_exploitable = %s" % is_exploitable + tty_colors.default())
+            print(
+                tty_colors.blue() + "Software exception.\n" + tty_colors.default())
             reportexploitable = "Software exception, probably not exploitable.\n"
         elif exception == "EXC_BREAKPOINT":
             is_exploitable = "no"
-            print
-            tty_colors.blue() + "is_exploitable = %s" % is_exploitable + tty_colors.default()
+            print(
+                tty_colors.blue() + "is_exploitable = %s" % is_exploitable + tty_colors.default())
         elif exception == "EXC_CRASH":
             is_exploitable = "no"
-            print
-            tty_colors.blue() + "is_exploitable = %s" % is_exploitable + tty_colors.default()
+            print(
+                tty_colors.blue() + "is_exploitable = %s" % is_exploitable + tty_colors.default())
         else:
-            print
-            tty_colors.red() + "Unknown exception number %d\n" % exception + tty_colors.default()
+            print(
+                tty_colors.red() + "Unknown exception number %d\n" % exception + tty_colors.default())
             is_exploitable = "yes"
-            print
-            tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default()
+            print(
+                tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default())
+
         if not g_ignore_frame_pointer and exception == "EXC_BAD_ACCESS" and bp_inconsistent_with_sp(debugger, command,
                                                                                                     result, dict):
             is_exploitable = "yes"
-            print
-            tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default()
-            print
-            tty_colors.red() + "Presumed exploitable based on the discrepancy between the stack pointer and base pointer registers. If -fomit-frame-pointer was used to build the code, set the CW_IGNORE_FRAME_POINTER env variable." + tty_colors.default()
+            print(
+                tty_colors.red() + "is_exploitable = %s" % is_exploitable + tty_colors.default())
+            print(
+                tty_colors.red() + "Presumed exploitable based on the discrepancy between the stack pointer and base pointer registers. If -fomit-frame-pointer was used to build the code, set the CW_IGNORE_FRAME_POINTER env variable." + tty_colors.default())
             reportexploitable = "Presumed exploitable based on the discrepancy between the stack pointer and base pointer registers. If -fomit-frame-pointer was used to build the code, set the CW_IGNORE_FRAME_POINTER env variable.\nexploitable = yes"
 
 
@@ -1088,6 +1148,8 @@ def alias(debugger, commands, result, dict):
     execute(debugger, 'command script add --function lisa.si si', result, dict)
     execute(debugger, 'command script add --function lisa.so so', result, dict)
     execute(debugger, 'command script add --function lisa.aslr aslr', result, dict)
+    execute(debugger, 'command script add --function lisa.thread_data thread_data', result, dict)
+
 
 
 tty_colors = TerminalColors(True)
