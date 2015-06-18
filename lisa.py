@@ -17,7 +17,7 @@
 import os
 import re
 import sys
-from libsvn.core import svn_auth_baton_t
+#from libsvn.core import svn_auth_baton_t
 import lldb
 import time
 import shlex
@@ -48,15 +48,24 @@ REGISTERS = {
 }
 
 ####################################
+#             Constants            #
+####################################
+
+init_ebp = 0
+
+stack_frames = {
+    #thread_id: {frame_id:[SP,FP,PC], f_id2:[...]},
+    #thread_id: {frame_id:[SP,FP,PC]}
+}
+
+####################################
 #             Misc Utils           #
 ####################################
 
 def banner():
     llisa2 = """
      lllllll lllllll   iiii
-     l:::::l l    sp = str(sbthread.GetSP())
-    pc = str(sbthread.GetPC())
-    fp = str(sbthread.GetFP()):::::l  i::::i
+     l:::::l l:::::l  i::::i
      l:::::l l:::::l   iiii
      l:::::l l:::::l
      l::::l  l::::l iiiiiii     ssssssssss     aaaaaaaaaaaaa
@@ -291,7 +300,7 @@ def execute(debugger, lldb_command, result, dict):
     """
         Execute given command and print the outout to stdout
     """
-    debugger = lldb.debugger
+    #debugger = lldb.debugger
     debugger.HandleCommand(lldb_command)
 
 
@@ -396,6 +405,7 @@ def frame_data(sbframe):
     data['sp'] = sbframe.GetSP()
     data['pc'] = sbframe.GetPC()
     data['fp'] = sbframe.GetFP()
+    data['reg'] = sbframe.GetRegisters()
     data['id'] = sbframe.GetFrameID()
     return data
 
@@ -406,7 +416,8 @@ def frame_info(sbframe, parent_thread, called_from_parent_thread = False):
     """
     data = frame_data(sbframe)
     frame_id = str(sbframe.GetFrameID())
-    msg = "ID:" + data['id'] + ",SP:" + data['sp'] + ",FP:" + data['fp'] + ",PC:" + data['pc']
+    msg = "ID:" + str(data['id']) + ",SP:" + str(data['sp']) + ",FP:" + str(data['fp']) + ",PC:" + str(data['pc'])
+
     return msg
 
 def thread_data(sbthread):
@@ -416,11 +427,10 @@ def thread_data(sbthread):
     data = {'tid': sbthread.GetThreadID(),
             'frames': []
             }
-    data[] = sbthread.GetThreadID()
+    data['id'] = sbthread.GetThreadID()
     frame_count = sbthread.GetNumFrames()
 
-    data['frames'] = map(frame_data(), sbthread.get_thread_frames())
-    print(data)
+    data['frames'] = sbthread.get_thread_frames()
     return data
 
 def thread_info(sbthread, useless):
@@ -435,6 +445,12 @@ def thread_info(sbthread, useless):
     return msg
 
 
+def target_info(sbtarget, useless):
+    """
+    @type sbtarget: lldb.SBTarget
+    """
+    return "target"
+
 def process_info(sbprocess, useless):
     """
     @type sbprocess: lldb.SBProcess
@@ -442,16 +458,22 @@ def process_info(sbprocess, useless):
     return "process"
 
 
+def print_strack(stack_frames):
+    for frame in stack_frames:
+        tty_colors.blue() + str(frame) + tty_colors.default()
+
+
 def get_stack(debugger, result, dict):
 
-
-    thread = lldb.thread
     '''
-    @type sbthread: lldb.SBThread
+    @type debugger: lldb.SBDebugger
+    @type thread: lldb.SBThread
     '''
-    bt = thread_data(thread)
 
-    result = executeReturnOutput(debugger, "x/20x $sp", result, dict)
+    bt = executeReturnOutput(debugger, "thread backtrace", result, dict)
+    result = []
+    for i in bt.split("*")[2:]:
+        result.append(i.strip().split(","))
     return result
 
 
@@ -461,14 +483,18 @@ def context(debugger, command, result, dict):
         Usage:
             ct
     """
+
     # disas
     op = executeReturnOutput(debugger, "disassemble -c 2 -s $pc", result, dict)
     print(op)
 
+
     # stack
-    stack_values = get_stack(debugger, result, dict)
     print(tty_colors.red() + "[*] Stack :\n" + tty_colors.default())
-    print(tty_colors.blue() + stack_values + tty_colors.default())
+
+    stack_values = get_stack(debugger, result, dict)
+    print_strack(stack_values)
+    print(tty_colors.blue() + str(stack_values) + tty_colors.default())
 
     # registers
     op = executeReturnOutput(debugger, "register read", result, dict)
@@ -530,7 +556,7 @@ def get_eflags(debugger, command, result, dict):
 def report(debugger, command, result, dict):
     filename = lldb.target.executable.basename + "_" + str(lldb.process.id) + "_" + str(int(time.time())) + ".html"
     description = '''Export the state of current target into a crashlog file'''
-
+    option = { "verbose": True}
     out_file = open(filename, 'w')
     if not out_file:
         result.PutCString("error: failed to open file '%s' for writing...", args[0]);
@@ -805,7 +831,7 @@ def bp_inconsistent_with_sp(debugger, command, result, dict):
     return False
 
 
-def is_stack_suspicious(access_address):
+def is_stack_suspicious(access_address, exception):
     if access_address == "0xbbadbeef":
         is_exploitable = "no"
         return
@@ -1149,6 +1175,7 @@ def alias(debugger, commands, result, dict):
     execute(debugger, 'command script add --function lisa.so so', result, dict)
     execute(debugger, 'command script add --function lisa.aslr aslr', result, dict)
     execute(debugger, 'command script add --function lisa.thread_data thread_data', result, dict)
+
 
 
 
